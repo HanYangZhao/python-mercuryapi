@@ -950,16 +950,30 @@ Reader_destroy_reader(Reader* self)
 {   
     TMR_Status ret;
     reset_filter(&self->tag_filter);
-    if ((ret = TMR_destroy(&self->reader)) != TMR_SUCCESS)
-        goto fail;
-    Py_TYPE(self)->tp_free((PyObject*)self);
-    Py_RETURN_NONE;
-fail:
-    PyErr_SetString(PyExc_RuntimeError, TMR_strerr(&self->reader, ret));
-    PyErr_Print();
-    return NULL;
-
+    if ((ret = TMR_destroy(&self->reader)) != TMR_SUCCESS){
+        PyErr_SetString(PyExc_RuntimeError, TMR_strerr(&self->reader, ret));
+        PyErr_Print();
+        return NULL;
+    }
+    else {
+        Py_TYPE(self)->tp_free((PyObject*)self);
+        Py_RETURN_NONE;
+    }
 }
+
+static PyObject *
+Reader_reboot_reader(Reader* self)
+{
+    TMR_Status ret;
+    if ((ret = TMR_reboot(&self->reader)) != TMR_SUCCESS){
+        PyErr_SetString(PyExc_RuntimeError, TMR_strerr(&self->reader, ret));
+        PyErr_Print();
+        return NULL;
+    }
+    else
+        Py_RETURN_NONE;
+}
+
 
 static PyObject *
 Reader_read_tag_mem(Reader *self, PyObject *args, PyObject *kwds)
@@ -1878,8 +1892,11 @@ static PyMethodDef Reader_methods[] = {
     {"stop_reading", (PyCFunction)Reader_stop_reading, METH_NOARGS,
      "Stop asynchronous reading"
     },
+    {"reboot",(PyCFunction)Reader_reboot_reader,METH_NOARGS,
+     "Reboot reader object"
+    },
     {"destroy",(PyCFunction)Reader_destroy_reader,METH_NOARGS,
-      "Remove reader object"
+     "Remove reader object"
     },
     {"read_tag_mem", (PyCFunction)Reader_read_tag_mem, METH_VARARGS | METH_KEYWORDS,
      "Read bytes from the memory bank of a tag"
