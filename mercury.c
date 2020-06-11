@@ -947,16 +947,18 @@ Reader_stop_reading(Reader* self)
 
 static PyObject *
 Reader_destroy_reader(Reader* self)
-{
+{   
+    TMR_Status ret;
     reset_filter(&self->tag_filter);
     if ((ret = TMR_destroy(&self->reader)) != TMR_SUCCESS)
         goto fail;
     Py_TYPE(self)->tp_free((PyObject*)self);
+    Py_RETURN_NONE;
 fail:
-    PyErr_SetString(PyExc_RuntimeError, TMR_strerr(reader, ret));
+    PyErr_SetString(PyExc_RuntimeError, TMR_strerr(&self->reader, ret));
     PyErr_Print();
     return NULL;
-Py_RETURN_NONE;
+
 }
 
 static PyObject *
