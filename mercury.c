@@ -63,14 +63,23 @@ typedef struct {
 
 typedef struct {
     PyObject_HEAD
+    uint8_t antenna;
+    uint32_t rfOnTime;
+    int8_t noiseFloor;
+} TMR_StatsPerAntenna;
+
+typedef struct {
+    PyObject_HEAD
     int8_t temperature;
     PyObject *protocol;
     uint16_t antenna;
     uint32_t frequency;
+    TMR_StatsPerAntenna statsPerAntenna[TMR_SR_MAX_ANTENNA_PORTS];
 } ReaderStatsData;
 
-static PyTypeObject TagReadDataType;
+
 static PyTypeObject ReaderStatsDataType;
+static PyTypeObject TagReadDataType;
 
 static void
 invoke_read_callback(TMR_Reader *reader, const TMR_TagReadData *tag, void *cookie);
@@ -738,7 +747,7 @@ Reader_enable_stats(Reader *self, PyObject *args, PyObject *kwds)
 {
     PyObject *temp;
     TMR_Status ret;
-    TMR_Reader_StatsFlag setFlag = TMR_READER_STATS_FLAG_TEMPERATURE | TMR_READER_STATS_FLAG_FREQUENCY | TMR_READER_STATS_FLAG_PROTOCOL | TMR_READER_STATS_FLAG_ANTENNA_PORTS;
+    TMR_Reader_StatsFlag setFlag = TMR_READER_STATS_FLAG_ALL;
     static char *kwlist[] = {"callback" , NULL};
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O", kwlist, &temp))
@@ -906,6 +915,9 @@ invoke_stats_callback(TMR_Reader *reader, const TMR_Reader_StatsValues *pdata, v
             stats->antenna = pdata->antenna;
         if (TMR_READER_STATS_FLAG_FREQUENCY & pdata->valid)
             stats->frequency = pdata->frequency;
+        if (TMR_READER_STATS_FLAG_RF_ON_TIME & pdata->valid)
+            //stats->statsPerAntenna = pdata->_perAntStorage;
+            memcpy(&stats->statsPerAntenna,pdata->_perAntStorage, sizeof(TMR_StatsPerAntenna) * TMR_SR_MAX_ANTENNA_PORTS);
 
         arglist = Py_BuildValue("(O)", stats);
         result = PyObject_CallObject(self->statsCallback, arglist);
@@ -2317,6 +2329,7 @@ static PyMemberDef ReaderStatsData_members[] = {
     {"protocol", T_OBJECT, offsetof(ReaderStatsData,protocol), READONLY, "Current tag protocol"},
     {"antenna", T_USHORT, offsetof(ReaderStatsData,antenna), READONLY, "Current Antenna"},
     {"frequency", T_UINT, offsetof(ReaderStatsData,frequency), READONLY, "Current RF carrier frequency(KHZ"},
+    {"statsPerAntenna",T_OBJECT,offsetof(ReaderStatsData,statsPerAntenna),READONLY, "Stats Per Antenna"},
     {NULL}  /* Sentinel */
 };
 
