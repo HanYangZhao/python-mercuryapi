@@ -66,7 +66,7 @@ typedef struct {
     uint8_t antenna;
     uint32_t rfOnTime;
     int8_t noiseFloor;
-} TMR_StatsPerAntenna;
+} StatsPerAntenna;
 
 typedef struct {
     PyObject_HEAD
@@ -74,10 +74,10 @@ typedef struct {
     PyObject *protocol;
     uint16_t antenna;
     uint32_t frequency;
-    TMR_StatsPerAntenna statsPerAntenna[TMR_SR_MAX_ANTENNA_PORTS];
+    StatsPerAntenna statsPerAntenna[TMR_SR_MAX_ANTENNA_PORTS];
 } ReaderStatsData;
 
-
+static PyTypeObject StatsPerAntennaType;
 static PyTypeObject ReaderStatsDataType;
 static PyTypeObject TagReadDataType;
 
@@ -901,11 +901,12 @@ invoke_stats_callback(TMR_Reader *reader, const TMR_Reader_StatsValues *pdata, v
     if(self && self->statsCallback)
     {
         ReaderStatsData *stats;
+        StatsPerAntenna *perAntStats;
         PyObject *arglist;
         PyObject *result;
         PyGILState_STATE gstate;
         gstate = PyGILState_Ensure();
-
+        perAntStats = PyObject_New(StatsPerAntenna, &StatsPerAntennaType);
         stats = PyObject_New(ReaderStatsData, &ReaderStatsDataType);
         if (TMR_READER_STATS_FLAG_TEMPERATURE & pdata->valid)
             stats->temperature = pdata->temperature;
@@ -915,9 +916,11 @@ invoke_stats_callback(TMR_Reader *reader, const TMR_Reader_StatsValues *pdata, v
             stats->antenna = pdata->antenna;
         if (TMR_READER_STATS_FLAG_FREQUENCY & pdata->valid)
             stats->frequency = pdata->frequency;
-        if (TMR_READER_STATS_FLAG_RF_ON_TIME & pdata->valid)
+        if (TMR_READER_STATS_FLAG_RF_ON_TIME & pdata->valid){
             //stats->statsPerAntenna = pdata->_perAntStorage;
-            memcpy(&stats->statsPerAntenna,pdata->_perAntStorage, sizeof(TMR_StatsPerAntenna) * TMR_SR_MAX_ANTENNA_PORTS);
+            memcpy(perAntStats,pdata->_perAntStorage, sizeof(StatsPerAntenna) * TMR_SR_MAX_ANTENNA_PORTS);
+            memcpy(&stats->statsPerAntenna,perAntStats, sizeof(StatsPerAntenna) * TMR_SR_MAX_ANTENNA_PORTS);
+        }
 
         arglist = Py_BuildValue("(O)", stats);
         result = PyObject_CallObject(self->statsCallback, arglist);
@@ -927,7 +930,7 @@ invoke_stats_callback(TMR_Reader *reader, const TMR_Reader_StatsValues *pdata, v
             PyErr_Print();
         Py_DECREF(arglist);
         Py_DECREF(stats);
-
+        Py_DECREF(perAntStats);
         PyGILState_Release(gstate);
     }
 }
@@ -2313,6 +2316,69 @@ static PyTypeObject TagReadDataType = {
     0,                         /* tp_new */
 };
 
+static void 
+StatsPerAntenna_dealloc(StatsPerAntenna* self)
+{
+    Py_TYPE(self)->tp_free((PyObject*)self); 
+};
+
+static PyMethodDef StatsPerAntenna_methods[] = {
+    {NULL}  /* Sentinel */
+};
+
+static PyMemberDef StatsPerAntenna_members[] = {
+    {"antenna", T_UBYTE, offsetof(StatsPerAntenna, antenna), READONLY, "Antenna Number"},
+    {"rfOnTime", T_UINT, offsetof(StatsPerAntenna,rfOnTime), READONLY, "Current RF On Time"},
+    {"noiseFloor", T_BYTE, offsetof(StatsPerAntenna,noiseFloor), READONLY, "Current Noise Floor"},
+    {NULL}  /* Sentinel */
+};
+
+
+static PyTypeObject StatsPerAntennaType = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    "mercury.ReaderStatsData.StatsPerAntenna",     /* tp_name */
+    sizeof(StatsPerAntenna),       /* tp_basicsize */
+    0,                            /* tp_itemsize */
+    (destructor)StatsPerAntenna_dealloc, /* tp_dealloc */
+    0,                         /* tp_print */
+    0,                         /* tp_getattr */
+    0,                         /* tp_setattr */
+    0,                         /* tp_reserved */
+    0,                         /* tp_repr */
+    0,                         /* tp_as_number */
+    0,                         /* tp_as_sequence */
+    0,                         /* tp_as_mapping */
+    0,                         /* tp_hash  */
+    0,                         /* tp_call */
+    0,                         /* tp_str */
+    0,                         /* tp_getattro */
+    0,                         /* tp_setattro */
+    0,                         /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT |
+        Py_TPFLAGS_BASETYPE,   /* tp_flags */
+    "StatsPerAntenna object",      /* tp_doc */
+    0,                         /* tp_traverse */
+    0,                         /* tp_clear */
+    0,                         /* tp_richcompare */
+    0,                         /* tp_weaklistoffset */
+    0,                         /* tp_iter */
+    0,                         /* tp_iternext */
+    StatsPerAntenna_methods,       /* tp_methods */
+    StatsPerAntenna_members,       /* tp_members */
+    0,     /* tp_getset */
+    0,                         /* tp_base */
+    0,                         /* tp_dict */
+    0,                         /* tp_descr_get */
+    0,                         /* tp_descr_set */
+    0,                         /* tp_dictoffset */
+    0,                         /* tp_init */
+    0,                         /* tp_alloc */
+    0,                         /* tp_new */
+};
+
+
+
+
 static void
 ReaderStatsData_dealloc(ReaderStatsData* self)
 {
@@ -2400,7 +2466,8 @@ initmercury(void)
     if (PyType_Ready(&ReaderType) < 0
         || PyType_Ready(&TagDataType) < 0
         || PyType_Ready(&TagReadDataType) < 0
-        || PyType_Ready(&ReaderStatsDataType) < 0)
+        || PyType_Ready(&ReaderStatsDataType) < 0
+        || PyType_Ready(&StatsPerAntennaType) < 0)
 #if PY_MAJOR_VERSION >= 3
         return NULL;
 
@@ -2422,6 +2489,8 @@ initmercury(void)
     PyModule_AddObject(m, "TagReadData", (PyObject *)&TagReadDataType);
     Py_INCREF(&ReaderStatsDataType);
     PyModule_AddObject(m, "ReaderStatsData", (PyObject *)&ReaderStatsDataType);
+    Py_INCREF(&StatsPerAntennaType);
+    PyModule_AddObject(m, "StatsPerAntenna", (PyObject *)&StatsPerAntennaType);
 #if PY_MAJOR_VERSION >= 3
     return m;
 #endif
