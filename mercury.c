@@ -904,6 +904,7 @@ invoke_stats_callback(TMR_Reader *reader, const TMR_Reader_StatsValues *pdata, v
         StatsPerAntenna *perAntStats;
         PyObject *arglist;
         PyObject *result;
+        PyObject *antStats;
         PyGILState_STATE gstate;
         gstate = PyGILState_Ensure();
         perAntStats = PyObject_New(StatsPerAntenna, &StatsPerAntennaType);
@@ -919,9 +920,11 @@ invoke_stats_callback(TMR_Reader *reader, const TMR_Reader_StatsValues *pdata, v
         if (TMR_READER_STATS_FLAG_RF_ON_TIME & pdata->valid){
             //stats->statsPerAntenna = pdata->_perAntStorage;
             memcpy(perAntStats,pdata->_perAntStorage, sizeof(StatsPerAntenna) * TMR_SR_MAX_ANTENNA_PORTS);
-            memcpy(&stats->statsPerAntenna,perAntStats, sizeof(StatsPerAntenna) * TMR_SR_MAX_ANTENNA_PORTS);
+            antStats = Py_BuildValue("(O)",perAntStats);
+            memcpy(&stats->statsPerAntenna,antStats, sizeof(StatsPerAntenna) * TMR_SR_MAX_ANTENNA_PORTS);
+            PyErr_SetString(antStats, "error");
+            PyErr_Print();
         }
-
         arglist = Py_BuildValue("(O)", stats);
         result = PyObject_CallObject(self->statsCallback, arglist);
         if(result != NULL)
@@ -929,8 +932,9 @@ invoke_stats_callback(TMR_Reader *reader, const TMR_Reader_StatsValues *pdata, v
         else
             PyErr_Print();
         Py_DECREF(arglist);
+        //Py_XDECREF(antStats);
+        // Py_XDECREF(perAntStats);
         Py_DECREF(stats);
-        Py_DECREF(perAntStats);
         PyGILState_Release(gstate);
     }
 }
@@ -2336,7 +2340,7 @@ static PyMemberDef StatsPerAntenna_members[] = {
 
 static PyTypeObject StatsPerAntennaType = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "mercury.ReaderStatsData.StatsPerAntenna",     /* tp_name */
+    "mercury.StatsPerAntenna",     /* tp_name */
     sizeof(StatsPerAntenna),       /* tp_basicsize */
     0,                            /* tp_itemsize */
     (destructor)StatsPerAntenna_dealloc, /* tp_dealloc */
@@ -2383,6 +2387,7 @@ static void
 ReaderStatsData_dealloc(ReaderStatsData* self)
 {
     Py_XDECREF(self->protocol);
+    // Py_XDECREF(self->statsPerAntenna);
     Py_TYPE(self)->tp_free((PyObject*)self);
 };
 
